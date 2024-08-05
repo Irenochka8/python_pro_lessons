@@ -8,27 +8,43 @@ def cache(max_limit=64):
         def deco(*args, **kwargs):
             cache_key = (args, tuple(kwargs.items()))
             if cache_key in deco._cache:
-                # увеличиваем частоту доступа
-                deco._freq[cache_key] += 1
+                _update_freq(cache_key)
                 return deco._cache[cache_key]
             result = f(*args, **kwargs)
-            # видаляємо якшо досягли ліміта
             if len(deco._cache) >= max_limit:
-                 # ищем наименьшее по частоте использования
-                 min_freq = min(deco._freq.values())
-                 least_freq_keys = [key for key, freq in deco._freq.items() if freq == min_freq]
-                 min_freq_key = least_freq_keys[0]
-                 # и удаляем
-                 del deco._cache[min_freq_key]
-                 del deco._freq[min_freq_key]
+                _key_out()
             deco._cache[cache_key] = result
             deco._freq[cache_key] = 1
+            deco._freq_order[1].add(cache_key)
             return result
+
+        def _update_freq(key):
+            current_freq = deco._freq[key]
+            new_freq = current_freq + 1
+            deco._freq[key] = new_freq
+            deco._freq_order[current_freq].remove(key)
+            if not deco.freq_order[current_freq]:
+                del deco._freq_order[current_freq]
+            if new_freq not in deco._freq_order:
+                deco._freq_order[new_freq] = set()
+            deco._freq_order[new_freq].add(key)
+        def _key_out():
+            min_freq = min(deco._freq_order.keys())
+            least_used_key = deco._freq_order[min_freq].pop()
+            if not deco._freq_order[min_freq]:
+                del deco._freq_order[min_freq]
+            del deco._cache[least_used_key]
+            del deco._freq[least_used_key]
+
         deco._cache = OrderedDict()
-        deco._freq = collections.defaultdict(int) #для хранения по частоте
+        deco._freq = {}
+        deco._freq_order = collections.defaultdict(set)
+        deco._update_freq = _update_freq
+        deco._key_out = _key_out
         return deco
     return internal
 
+import requests
 @cache(max_limit=64)
 def fetch_url(url, first_n=100):
     """Fetch a given url"""
